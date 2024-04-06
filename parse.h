@@ -20,10 +20,13 @@ typedef enum {
 
 // Define the Command structure
 typedef struct {
-    CommandType type;        // The type of command
-    char* argv[MAX_ARGS];    // Arguments list, including the command itself as argv[0]
+    CommandType type;
+    char* argv[MAX_ARGS];   // Arguments for the first command
+    int isPipe;             // Flag to indicate if there's a pipeline
+    char* pipeCommand[MAX_ARGS]; // Arguments for the second command in the pipeline
+    char* inputFile;        // For input redirection
+    char* outputFile;       // For output redirection
 } Command;
-
 // Function prototypes used in parse.c
 int parse_command(char* commandLine, Command* cmd);
 

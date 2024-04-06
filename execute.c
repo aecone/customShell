@@ -1,4 +1,3 @@
-// Assuming existence of struct Command and related includes
 #include "execute.h"
 #include <unistd.h>
 #include <fcntl.h>
@@ -7,74 +6,85 @@
 #include <stdlib.h>
 
 void execute_command(Command *cmd) {
-    int fd_in, fd_out, pipe_fds[2];
+    int pipe_fds[2]; // File descriptors for the pipe
     pid_t pid1, pid2;
+    int fd_in = -1, fd_out = -1; // File descriptors for redirection
 
-    // Input redirection
+    // Setup input redirection
     if (cmd->inputFile) {
         fd_in = open(cmd->inputFile, O_RDONLY);
         if (fd_in < 0) {
-            perror("open input file");
-            exit(EXIT_FAILURE);
+            perror("Failed to open input file");
+            return;
         }
     }
 
-    // Output redirection
+    // Setup output redirection
     if (cmd->outputFile) {
-        fd_out = open(cmd->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        fd_out = open(cmd->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0640);
         if (fd_out < 0) {
-            perror("open output file");
-            exit(EXIT_FAILURE);
+            perror("Failed to open output file");
+            if (fd_in != -1) close(fd_in);
+            return;
         }
     }
 
-    // Pipeline
-    if (cmd->pipe) {
+    // Check for pipeline and set up if necessary
+    if (cmd->isPipe) {
         if (pipe(pipe_fds) < 0) {
-            perror("pipe");
-            exit(EXIT_FAILURE);
+            perror("Failed to create pipe");
+            if (fd_in != -1) close(fd_in);
+            if (fd_out != -1) close(fd_out);
+            return;
         }
     }
 
+    // Fork to execute the first (or only) command
     pid1 = fork();
-    if (pid1 == 0) {
-        // Child process for the first command or only command
-        if (cmd->inputFile) {
+    if (pid1 == 0) { // First child process
+        // Apply input redirection
+        if (fd_in != -1) {
             dup2(fd_in, STDIN_FILENO);
             close(fd_in);
         }
-        if (cmd->pipe) {
+        // If there's a pipeline, set up the first command to write to the pipe
+        if (cmd->isPipe) {
             dup2(pipe_fds[1], STDOUT_FILENO);
-        } else if (cmd->outputFile) {
+            close(pipe_fds[0]);
+            close(pipe_fds[1]);
+        } else if (fd_out != -1) { // Apply output redirection if specified and not piping
             dup2(fd_out, STDOUT_FILENO);
             close(fd_out);
         }
         execvp(cmd->argv[0], cmd->argv);
-        perror("execvp first command");
+        perror("Execution failed");
         exit(EXIT_FAILURE);
     }
 
-    if (cmd->pipe) {
+    // If a pipeline is specified, fork again to execute the second command
+    if (cmd->isPipe) {
         pid2 = fork();
-        if (pid2 == 0) {
-            // Child process for the second command in the pipeline
+        if (pid2 == 0) { // Second child process for the pipeline
             dup2(pipe_fds[0], STDIN_FILENO);
-            if (cmd->outputFile) {
+            if (fd_out != -1) { // Apply output redirection to the second command if specified
                 dup2(fd_out, STDOUT_FILENO);
                 close(fd_out);
             }
+            close(pipe_fds[0]);
             close(pipe_fds[1]);
             execvp(cmd->pipeCommand[0], cmd->pipeCommand);
-            perror("execvp second command");
+            perror("Execution failed");
             exit(EXIT_FAILURE);
         }
         close(pipe_fds[0]);
         close(pipe_fds[1]);
     }
 
-    // Wait for child processes to finish
-    waitpid(pid1, NULL, 0);
-    if (cmd->pipe) {
-        waitpid(pid2, NULL, 0);
-    }
+    // Parent process: wait for child processes to complete
+    if (pid1 > 0) waitpid(pid1, NULL, 0);
+    if (cmd->isPipe && pid2 > 0) waitpid(pid2, NULL, 0);
+
+    // Clean up redirection file descriptors
+    if (fd_in != -1) close(fd_in);
+    if (fd_out != -1) close(fd_out);
 }

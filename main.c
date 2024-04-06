@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "parse.h"
+#include "execute.h" 
 
 #define MAX_COMMAND_LENGTH 1024
 
@@ -58,7 +59,7 @@ int main(int argc, char* argv[]) {
                 }
                 break;
             case CMD_EXTERNAL:
-                printf("%s: command not found\n", cmd.argv[0]);
+                execute_command(&cmd);
                 break;
         }
 
