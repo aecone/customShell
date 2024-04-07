@@ -5,6 +5,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Helper function to search for and execute a command in specified directories.
+int execute_with_search(char *const argv[]) {
+    const char *directories[] = {"/usr/local/bin", "/usr/bin", "/bin"};
+    char path[1024];
+
+    for (int i = 0; i < sizeof(directories) / sizeof(char *); i++) {
+        snprintf(path, sizeof(path), "%s/%s", directories[i], argv[0]);
+        // Try to execute the command.
+        execv(path, argv);
+        // If execv returns, it means either the file doesn't exist in the directory,
+        // or it's not executable. So, try the next directory.
+    }
+    // If the command wasn't found in the specified directories, return 0.
+    return 0;
+}
+
 void execute_command(Command *cmd) {
     int pipe_fds[2]; // File descriptors for the pipe
     pid_t pid1, pid2;
@@ -56,7 +72,9 @@ void execute_command(Command *cmd) {
             dup2(fd_out, STDOUT_FILENO);
             close(fd_out);
         }
-        execvp(cmd->argv[0], cmd->argv);
+        if (execute_with_search(cmd->argv) == 0) {
+            execvp(cmd->argv[0], cmd->argv);
+        }
         perror("Execution failed");
         exit(EXIT_FAILURE);
     }
