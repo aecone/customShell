@@ -164,3 +164,4 @@ void execute_which(const char* command) {
 
     printf("%s not found\n", command);
 }
+
