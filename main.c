@@ -92,25 +92,63 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+// int read_command(int fd, char* buffer) {
+//     int bytesRead = 0;
+//     char ch;
+//     while (read(fd, &ch, 1) > 0) {
+//         if (ch == '\n') break; // End of command
+//         buffer[bytesRead++] = ch;
+//         if (bytesRead == MAX_COMMAND_LENGTH) { // Prevent buffer overflow
+//             fprintf(stderr, "Command too long.\n");
+//             while (read(fd, &ch, 1) > 0 && ch != '\n'); // Drain the rest of the line
+//             break;
+//         }
+//     }
+
+//     if (bytesRead == 0 && ch != '\n') return 0; // EOF or read error
+
+//     buffer[bytesRead] = '\0'; // Null-terminate the string
+//     return 1; // Continue running
+// }
+
+
 int read_command(int fd, char* buffer) {
     int bytesRead = 0;
     char ch;
-    while (read(fd, &ch, 1) > 0) {
-        if (ch == '\n') break; // End of command
-        buffer[bytesRead++] = ch;
-        if (bytesRead == MAX_COMMAND_LENGTH) { // Prevent buffer overflow
-            fprintf(stderr, "Command too long.\n");
-            while (read(fd, &ch, 1) > 0 && ch != '\n'); // Drain the rest of the line
-            break;
+    while (1) {
+        ssize_t result = read(fd, &ch, 1);
+        
+        if (result > 0) {
+            // Check for newline character, indicating the end of a command.
+            if (ch == '\n') {
+                break;
+            }
+            // Append the character to the buffer if not newline.
+            buffer[bytesRead++] = ch;
+            // Ensure we don't exceed the buffer capacity.
+            if (bytesRead >= MAX_COMMAND_LENGTH) {
+                // Command too long; handle error appropriately.
+                buffer[MAX_COMMAND_LENGTH - 1] = '\0'; // Ensure null-termination.
+                fprintf(stderr, "Error: Command too long.\n");
+                return 1; // Might want to flush the remaining characters.
+            }
+        } else if (result == 0) {
+            // EOF reached, no more input.
+            if (bytesRead == 0) { // No command read before EOF.
+                return 0;
+            }
+            // A command was being read, but EOF occurred before newline.
+            break; // Proceed to null-terminate and process the command.
+        } else {
+            // An error occurred during read.
+            perror("read");
+            return 0; // Return 0 to indicate termination.
         }
     }
 
-    if (bytesRead == 0 && ch != '\n') return 0; // EOF or read error
-
-    buffer[bytesRead] = '\0'; // Null-terminate the string
-    return 1; // Continue running
+    buffer[bytesRead] = '\0'; // Null-terminate the command string.
+    return 1; // Command successfully read.
 }
-
 
 void execute_which(const char* command) {
     const char* directories[] = {"/usr/local/bin", "/usr/bin", "/bin"};
