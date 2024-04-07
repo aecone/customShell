@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h> // For open()
 #include "parse.h"
 #include "execute.h"
 
@@ -11,21 +12,21 @@ int read_command(int fd, char* buffer);
 void execute_which(const char* command);
 
 int main(int argc, char* argv[]) {
-    char commandLine[MAX_COMMAND_LENGTH + 1]; // +1 for the null terminator
+        char commandLine[MAX_COMMAND_LENGTH + 1]; // +1 for the null terminator
     Command cmd;
     int running = 1;
-    FILE* input_stream = stdin; // Default input is stdin
+    int fd = STDIN_FILENO; // Default to standard input
     int interactive_mode = isatty(STDIN_FILENO) && (argc == 1);
 
     if (argc == 2) {
-        input_stream = fopen(argv[1], "r");
-        if (!input_stream) {
+        fd = open(argv[1], O_RDONLY);
+        if (fd == -1) {
             perror("Failed to open file");
             exit(EXIT_FAILURE);
         }
         interactive_mode = 0; // Disable interactive mode if file argument is provided
     }
-
+    
     if (interactive_mode) {
         printf("Welcome to my shell!\n");
     }
@@ -36,12 +37,11 @@ int main(int argc, char* argv[]) {
             fflush(stdout);
         }
 
-        read_command(STDIN_FILENO, commandLine);
-        if (commandLine[0] == '\0') { // If the command line is empty, skip the rest of the loop
-            continue;
-        }
-        if (!parse_command(commandLine, &cmd)) continue;
+        running = read_command(fd, commandLine);
+        if (!running) break; // Stop if read_command indicates to stop
+        if (commandLine[0] == '\0') continue; // If the command line is empty, skip the rest of the loop
 
+        if (!parse_command(commandLine, &cmd)) continue;
         switch (cmd.type) {
             case CMD_CD:
                 if (cmd.argv[1] == NULL || cmd.argv[2] != NULL) {
@@ -84,37 +84,31 @@ int main(int argc, char* argv[]) {
     if (interactive_mode) {
         printf("Exiting my shell.\n");
     }
+
+    if (fd != STDIN_FILENO) {
+        close(fd);
+    }
+
     return 0;
 }
 
 int read_command(int fd, char* buffer) {
     int bytesRead = 0;
     char ch;
-    while (1) {
-        int result = read(fd, &ch, 1);
-        if (result > 0) {
-            if (ch == '\n') { // Command is complete
-                break;
-            }
-            buffer[bytesRead++] = ch;
-            if (bytesRead >= MAX_COMMAND_LENGTH) { // Prevent buffer overflow
-                fprintf(stderr, "Command too long.\n");
-                bytesRead = 0; // Reset bytesRead to discard the command
-                return 1; // Indicate that the program should continue running
-            }
-        } else {
-            // End of file or read error
-            if (result == 0) { // End of file
-                return 0; // Indicate that the program should stop running
-            } else {
-                perror("read");
-            }
-            buffer[bytesRead] = '\0'; // Ensure the buffer is null-terminated
-            return 1; // Indicate that the program should continue running
+    while (read(fd, &ch, 1) > 0) {
+        if (ch == '\n') break; // End of command
+        buffer[bytesRead++] = ch;
+        if (bytesRead == MAX_COMMAND_LENGTH) { // Prevent buffer overflow
+            fprintf(stderr, "Command too long.\n");
+            while (read(fd, &ch, 1) > 0 && ch != '\n'); // Drain the rest of the line
+            break;
         }
     }
+
+    if (bytesRead == 0 && ch != '\n') return 0; // EOF or read error
+
     buffer[bytesRead] = '\0'; // Null-terminate the string
-    return 1; // Indicate that the program should continue running
+    return 1; // Continue running
 }
 
 
