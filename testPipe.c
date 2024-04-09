@@ -6,11 +6,9 @@
 int main() {
     char input[MAX_LENGTH];
 
-    // Read input from stdin
     fgets(input, MAX_LENGTH, stdin);
 
-    // Print the input string
-    printf("Bro this ain't it: %s", input);
+    printf("Pipe: %s", input);
 
     return 0;
 }

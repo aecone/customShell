@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h> // For open()
+#include <fcntl.h> 
 #include "parse.h"
 #include "execute.h"
 
@@ -12,10 +12,10 @@ int read_command(int fd, char* buffer);
 void execute_which(const char* command);
 
 int main(int argc, char* argv[]) {
-        char commandLine[MAX_COMMAND_LENGTH + 1]; // +1 for the null terminator
+    char commandLine[MAX_COMMAND_LENGTH + 1]; 
     Command cmd;
     int running = 1;
-    int fd = STDIN_FILENO; // Default to standard input
+    int fd = STDIN_FILENO; 
     int interactive_mode = isatty(STDIN_FILENO) && (argc == 1);
 
     if (argc == 2) {
@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
             perror("Failed to open file");
             exit(EXIT_FAILURE);
         }
-        interactive_mode = 0; // Disable interactive mode if file argument is provided
+        interactive_mode = 0; 
     }
     
     if (interactive_mode) {
@@ -38,9 +38,10 @@ int main(int argc, char* argv[]) {
         }
 
         running = read_command(fd, commandLine);
-        if (!running) break; // Stop if read_command indicates to stop
-        if (commandLine[0] == '\0') continue; // If the command line is empty, skip the rest of the loop
+        if (!running) break; 
+        if (commandLine[0] == '\0') continue; 
 
+        //commands 
         if (!parse_command(commandLine, &cmd)) continue;
         switch (cmd.type) {
             case CMD_CD:
@@ -61,13 +62,20 @@ int main(int argc, char* argv[]) {
                 }
                 break;
             case CMD_EXIT:
-                running = 0;
+
+                for (int i = 1; cmd.argv[i] != NULL; i++) {
+                    printf("%s ", cmd.argv[i]);
+                }
+                if (cmd.argv[1] != NULL) { 
+                    printf("\n"); 
+                }
+                running = 0; 
                 break;
             case CMD_WHICH:
-                if (cmd.argv[1] != NULL) {
+                if (cmd.argv[1] != NULL && cmd.argv[2] == NULL) {
                     execute_which(cmd.argv[1]);
-                } else {
-                    printf("which: missing argument\n");
+                } else{
+                    exit(EXIT_FAILURE);
                 }
                 break;
             case CMD_EXTERNAL:
@@ -75,7 +83,6 @@ int main(int argc, char* argv[]) {
                 break;
         }
 
-        // Free dynamically allocated command arguments
         for (int i = 0; cmd.argv[i] != NULL; i++) {
             free(cmd.argv[i]);
         }
@@ -92,25 +99,6 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-// int read_command(int fd, char* buffer) {
-//     int bytesRead = 0;
-//     char ch;
-//     while (read(fd, &ch, 1) > 0) {
-//         if (ch == '\n') break; // End of command
-//         buffer[bytesRead++] = ch;
-//         if (bytesRead == MAX_COMMAND_LENGTH) { // Prevent buffer overflow
-//             fprintf(stderr, "Command too long.\n");
-//             while (read(fd, &ch, 1) > 0 && ch != '\n'); // Drain the rest of the line
-//             break;
-//         }
-//     }
-
-//     if (bytesRead == 0 && ch != '\n') return 0; // EOF or read error
-
-//     buffer[bytesRead] = '\0'; // Null-terminate the string
-//     return 1; // Continue running
-// }
-
 
 int read_command(int fd, char* buffer) {
     int bytesRead = 0;
@@ -119,49 +107,75 @@ int read_command(int fd, char* buffer) {
         ssize_t result = read(fd, &ch, 1);
         
         if (result > 0) {
-            // Check for newline character, indicating the end of a command.
+
             if (ch == '\n') {
                 break;
             }
-            // Append the character to the buffer if not newline.
+
             buffer[bytesRead++] = ch;
-            // Ensure we don't exceed the buffer capacity.
+
             if (bytesRead >= MAX_COMMAND_LENGTH) {
-                // Command too long; handle error appropriately.
-                buffer[MAX_COMMAND_LENGTH - 1] = '\0'; // Ensure null-termination.
+
+                buffer[MAX_COMMAND_LENGTH - 1] = '\0'; 
                 fprintf(stderr, "Error: Command too long.\n");
-                return 1; // Might want to flush the remaining characters.
+                return 1; 
             }
         } else if (result == 0) {
-            // EOF reached, no more input.
-            if (bytesRead == 0) { // No command read before EOF.
+
+            if (bytesRead == 0) { 
                 return 0;
             }
-            // A command was being read, but EOF occurred before newline.
-            break; // Proceed to null-terminate and process the command.
+           
+            break; 
         } else {
-            // An error occurred during read.
+
             perror("read");
-            return 0; // Return 0 to indicate termination.
+            return 0; 
         }
     }
 
-    buffer[bytesRead] = '\0'; // Null-terminate the command string.
-    return 1; // Command successfully read.
+    buffer[bytesRead] = '\0'; 
+    return 1; 
 }
 
 void execute_which(const char* command) {
-    const char* directories[] = {"/usr/local/bin", "/usr/bin", "/bin"};
-    char path[1024];
 
-    for (int i = 0; i < sizeof(directories) / sizeof(directories[0]); i++) {
-        snprintf(path, sizeof(path), "%s/%s", directories[i], command);
-        if (access(path, X_OK) == 0) {
-            printf("%s\n", path);
-            return;
+    //commands we don't want
+    const char* builtins[] = {
+        "ls", "cd", "pwd", "touch", "mkdir", "rm", "cp", "mv", "chmod",
+        "chown", "df", "exit", "du", "find", "grep", "awk", "sed", "sort", "cat",
+        "head", "tail", "less", "more", "echo", "whoami", "uname", "top",
+        "ps", "kill", "ssh", "scp", "wget", "curl", "tar", "gzip", "gunzip",
+        "zip", "unzip", "mount", "umount", "ifconfig", "ping", "netstat",
+        "systemctl", "journalctl", NULL 
+    };
+    int num_builtins = sizeof(builtins) / sizeof(builtins[0]) - 1; 
+
+
+    for (int i = 0; i < num_builtins; i++) {
+        if (strcmp(command, builtins[i]) == 0) {
+
+            exit(EXIT_FAILURE);
         }
     }
 
-    printf("%s not found\n", command);
-}
+    //path we look thru
+    const char* directories[] = {"/usr/local/bin", "/usr/bin", "/bin"};
+    int num_directories = sizeof(directories) / sizeof(directories[0]);
 
+    char path[1024];
+    int found = 0;
+
+    for (int i = 0; i < num_directories && !found; i++) {
+        snprintf(path, sizeof(path), "%s/%s", directories[i], command);
+        if (access(path, X_OK) == 0) {
+            printf("%s\n", path);
+            found = 1;
+        }
+    }
+
+    if (!found) {
+        fprintf(stderr, "%s not found.\n", command);
+        exit(EXIT_FAILURE);
+    }
+}

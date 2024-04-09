@@ -4,19 +4,18 @@
 #include <string.h>
 #include <glob.h>
 
-// A helper function for parsing the pipeline part, if present
+
 void parse_pipeline_command(char *pipelinePart, Command *cmd) {
     char *tempArgs[MAX_ARGS];
-    int argIndex = 0; // Index for arguments in the pipeline command
+    int argIndex = 0; 
     char *token = strtok(pipelinePart, " \n");
 
     while (token != NULL && argIndex < MAX_ARGS - 1) {
         tempArgs[argIndex++] = strdup(token);
         token = strtok(NULL, " \n");
     }
-    tempArgs[argIndex] = NULL; // Ensure null termination
+    tempArgs[argIndex] = NULL; 
 
-    // Copy the parsed arguments for the pipeline command
     for (int i = 0; i <= argIndex; i++) {
         cmd->pipeCommand[i] = tempArgs[i];
     }
@@ -27,21 +26,21 @@ int parse_command(char* commandLine, Command* cmd) {
     
     char *pipelinePart = strchr(commandLine, '|');
     if (pipelinePart) {
-        *pipelinePart = '\0'; // Split the command line at the pipeline
-        pipelinePart++; // Move to the start of the second command
-        cmd->isPipe = 1; // Mark this command as containing a pipeline
+        *pipelinePart = '\0'; 
+        pipelinePart++; 
+        cmd->isPipe = 1; 
     }
 
-    char *tempArgs[MAX_ARGS];
+    char *tempArgs[MAX_ARGS]; 
     int argIndex = 0;
     char *token = strtok(commandLine, " \n");
     
     while (token != NULL) {
         if (strcmp(token, "<") == 0) {
-            token = strtok(NULL, " \n"); // Input redirection
+            token = strtok(NULL, " \n"); 
             if(token) cmd->inputFile = strdup(token);
         } else if (strcmp(token, ">") == 0) {
-            token = strtok(NULL, " \n"); // Output redirection
+            token = strtok(NULL, " \n"); 
             if(token) cmd->outputFile = strdup(token);
         } else if (strchr(token, '*')) {
             glob_t glob_result;
@@ -61,7 +60,6 @@ int parse_command(char* commandLine, Command* cmd) {
     }
     tempArgs[argIndex] = NULL;
 
-    // Determine the command type
     if (argIndex > 0) {
         if (strcmp(tempArgs[0], "cd") == 0) cmd->type = CMD_CD;
         else if (strcmp(tempArgs[0], "pwd") == 0) cmd->type = CMD_PWD;
@@ -70,14 +68,34 @@ int parse_command(char* commandLine, Command* cmd) {
         else cmd->type = CMD_EXTERNAL;
     }
 
-    // Copy the parsed arguments for the first command
     for (int i = 0; i <= argIndex; i++) {
         cmd->argv[i] = tempArgs[i];
     }
 
-    // If a pipeline is present, parse the second part
     if (cmd->isPipe) {
         parse_pipeline_command(pipelinePart, cmd);
+    }
+
+    for (int i = 0; i < argIndex; i++) {
+        if (strcmp(tempArgs[i], "then") == 0) {
+
+            int thenArgIndex = 0;
+            i++; 
+            while (i < argIndex && strcmp(tempArgs[i], "else") != 0) {
+                cmd->thenCommand[thenArgIndex++] = tempArgs[i];
+                i++;
+            }
+            cmd->thenCommand[thenArgIndex] = NULL;
+        } else if (strcmp(tempArgs[i], "else") == 0) {
+            
+            int elseArgIndex = 0;
+            i++; 
+            while (i < argIndex) {
+                cmd->elseCommand[elseArgIndex++] = tempArgs[i];
+                i++;
+            }
+            cmd->elseCommand[elseArgIndex] = NULL;
+        }
     }
 
     return argIndex;
