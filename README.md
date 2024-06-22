@@ -1,5 +1,3 @@
-Names: Natalie Chow (njc151), Andrea Kim (alk203)
-
 # myShell
 
 To compile the project, run `make` in the terminal from the directory containing your source files and the Makefile. Then run `./mysh`
